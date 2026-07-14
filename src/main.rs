@@ -125,10 +125,17 @@ fn render(frame: &mut Frame, editor: &Editor) {
         return;
     }
 
-    let cursor = 2 + Line::from(&editor.input[..editor.cursor]).width() as u16;
+    let prompt = env::var("TCU_PROMPT").unwrap_or_else(|_| "❯ ".into());
+    let accent = env::var("TCU_ACCENT")
+        .ok()
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(Color::Cyan);
+
+    let cursor = Line::from(prompt.as_str()).width() as u16
+        + Line::from(&editor.input[..editor.cursor]).width() as u16;
     let scroll = cursor.saturating_sub(area.width.saturating_sub(1));
     let line = Line::from(vec![
-        Span::styled("> ", Style::default().fg(Color::Cyan)),
+        Span::styled(prompt.as_str(), Style::default().fg(accent)),
         Span::raw(&editor.input),
     ]);
 
