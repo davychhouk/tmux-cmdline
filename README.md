@@ -4,11 +4,7 @@ A themeable popup replacement for tmux's `prefix + :` command prompt.
 Catppuccin-aware, configured entirely through tmux options — no rebuild to
 retheme.
 
-```
-╭───────────── Tmux Cmdline ─────────────╮
-│  new-window -c ~/projects█            │
-╰────────────────────────────────────────╯
-```
+<img width="1512" height="947" alt="image" src="https://github.com/user-attachments/assets/74386dc3-8835-4c06-9746-0130e51bc6c1" />
 
 ## Requirements
 
