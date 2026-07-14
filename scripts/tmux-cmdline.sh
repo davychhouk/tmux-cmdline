@@ -2,21 +2,21 @@
 set -eu
 
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-binary="$root/target/release/tmux-command-ui"
+binary="$root/target/release/tmux-cmdline"
 command_file=$1
 
 umask 077
 : >"$command_file"
 
 if [ ! -x "$binary" ]; then
-  tmux display-message "tmux-command-ui: run cargo build --release"
+  tmux display-message "tmux-cmdline: run cargo build --release"
   exit 0
 fi
 
-# Option lookup: @tmux-command-ui-* first, then a catppuccin @thm_* color,
+# Option lookup: @tmux-cmdline-* first, then a catppuccin @thm_* color,
 # then a hard fallback. Values are format-expanded so "#{@thm_sapphire}" works.
 opt() {
-  value=$(tmux display-message -p "#{E:@tmux-command-ui-$1}")
+  value=$(tmux display-message -p "#{E:@tmux-cmdline-$1}")
   [ -n "$value" ] || value=$(tmux display-message -p "$2")
   printf '%s' "${value:-$3}"
 }

@@ -1,5 +1,5 @@
 [package]
-name = "tmux-command-ui"
+name = "tmux-cmdline"
 version = "0.1.0"
 edition = "2024"
 

@@ -1,4 +1,4 @@
-# tmux-command-ui
+# tmux-cmdline
 
 A popup replacement for tmux's `prefix + :` command prompt.
 
@@ -18,7 +18,7 @@ cargo build --release
 Load the plugin from `~/.tmux.conf`:
 
 ```tmux
-run-shell "/absolute/path/to/tmux-command-ui/tmux-command-ui.tmux"
+run-shell "/absolute/path/to/tmux-cmdline/tmux-cmdline.tmux"
 ```
 
 Reload tmux, then press `prefix + :`. Press Enter to execute, or Escape to
@@ -35,15 +35,15 @@ plain terminal colors. Override any of these in `~/.tmux.conf` (values are
 format-expanded, so `#{@thm_*}` references work):
 
 ```tmux
-set -g @tmux-command-ui-accent "#{@thm_blue}"      # border, title, prompt
-set -g @tmux-command-ui-bg     "#{@thm_base}"      # popup background
-set -g @tmux-command-ui-fg     "#{@thm_fg}"        # input text
-set -g @tmux-command-ui-prompt " "                # prompt glyph
-set -g @tmux-command-ui-title  " Tmux Cmdline "    # popup title (centred)
-set -g @tmux-command-ui-width  "40%"               # popup width
-set -g @tmux-command-ui-position "bottom"          # top | center | bottom (or raw -y value)
-set -g @tmux-command-ui-offset   "-6"              # rows to shift position: negative = up
-set -g @tmux-command-ui-border "rounded"           # popup border lines
+set -g @tmux-cmdline-accent "#{@thm_blue}"      # border, title, prompt
+set -g @tmux-cmdline-bg     "#{@thm_base}"      # popup background
+set -g @tmux-cmdline-fg     "#{@thm_fg}"        # input text
+set -g @tmux-cmdline-prompt " "                # prompt glyph
+set -g @tmux-cmdline-title  " Tmux Cmdline "    # popup title (centred)
+set -g @tmux-cmdline-width  "40%"               # popup width
+set -g @tmux-cmdline-position "bottom"          # top | center | bottom (or raw -y value)
+set -g @tmux-cmdline-offset   "-6"              # rows to shift position: negative = up
+set -g @tmux-cmdline-border "rounded"           # popup border lines
 ```
 
 ## Positioning
@@ -52,8 +52,8 @@ set -g @tmux-command-ui-border "rounded"           # popup border lines
 up, positive = down):
 
 ```tmux
-set -g @tmux-command-ui-position "bottom"
-set -g @tmux-command-ui-offset   "-6"    # 6 rows above the usual bottom spot
+set -g @tmux-cmdline-position "bottom"
+set -g @tmux-cmdline-offset   "-6"    # 6 rows above the usual bottom spot
 ```
 
 Named anchors compile to tmux format arithmetic — e.g. `bottom` with offset
@@ -64,7 +64,7 @@ Anything other than `top`/`center`/`bottom` is passed to `display-popup -y`
 verbatim, so any raw value or format expression works:
 
 ```tmux
-set -g @tmux-command-ui-position "#{e|/:#{client_height},4}"  # quarter height
+set -g @tmux-cmdline-position "#{e|/:#{client_height},4}"  # quarter height
 ```
 
 Raw values are expanded when the popup opens, before `display-popup` runs, so
