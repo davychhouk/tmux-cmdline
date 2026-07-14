@@ -5,3 +5,5 @@ edition = "2024"
 
 [dependencies]
 ratatui = "0.30"
+unicode-segmentation = "1"
+unicode-width = "0.2"

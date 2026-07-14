@@ -1405,6 +1405,8 @@ name = "tmux-cmdline"
 version = "0.1.0"
 dependencies = [
  "ratatui",
+ "unicode-segmentation",
+ "unicode-width",
 ]
 
 [[package]]

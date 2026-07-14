@@ -6,6 +6,8 @@ use ratatui::{
     prelude::*,
     widgets::Paragraph,
 };
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 #[derive(Default)]
 struct Editor {
@@ -133,7 +135,19 @@ fn render(frame: &mut Frame, editor: &Editor) {
 
     let cursor = Line::from(prompt.as_str()).width() as u16
         + Line::from(&editor.input[..editor.cursor]).width() as u16;
-    let scroll = cursor.saturating_sub(area.width.saturating_sub(1));
+
+    // Snap the scroll offset to a grapheme boundary so a double-width
+    // glyph never straddles the left edge and leaves a gap. Must walk the
+    // same units the renderer does: graphemes measured as strings (ZWJ
+    // sequences count once, not per codepoint).
+    let desired = cursor.saturating_sub(area.width.saturating_sub(1));
+    let mut scroll = 0;
+    for grapheme in prompt.graphemes(true).chain(editor.input.graphemes(true)) {
+        if scroll >= desired {
+            break;
+        }
+        scroll += grapheme.width() as u16;
+    }
     let line = Line::from(vec![
         Span::styled(prompt.as_str(), Style::default().fg(accent)),
         Span::raw(&editor.input),
@@ -145,6 +159,8 @@ fn render(frame: &mut Frame, editor: &Editor) {
 
 #[cfg(test)]
 mod tests {
+    use ratatui::backend::TestBackend;
+
     use super::*;
 
     fn key(code: KeyCode) -> KeyEvent {
@@ -165,5 +181,42 @@ mod tests {
 
         assert_eq!(editor.input, "nw 🦀 ");
         assert_eq!(editor.cursor, editor.input.len());
+    }
+
+    #[test]
+    fn scroll_never_splits_a_wide_character() {
+        let mut editor = Editor::default();
+        for c in "🦀🦀🦀".chars() {
+            editor.handle(key(KeyCode::Char(c)));
+        }
+
+        // Line is "❯ 🦀🦀🦀" (8 cols); a 6-col area wants scroll 3, which
+        // would cut the first crab in half. Snapping moves it to 4.
+        let mut terminal = Terminal::new(TestBackend::new(6, 1)).unwrap();
+        terminal.draw(|frame| render(frame, &editor)).unwrap();
+        terminal.backend().assert_buffer_lines(["🦀🦀  "]);
+    }
+
+    #[test]
+    fn scroll_counts_multi_codepoint_graphemes_like_the_renderer() {
+        // ZWJ sequence: 3 codepoints summing to 4 char-widths, but the
+        // renderer measures it as one width-2 grapheme.
+        assert_eq!("👩‍🔬".width(), 2);
+
+        let mut editor = Editor::default();
+        for c in "👩‍🔬a🦀".chars() {
+            editor.handle(key(KeyCode::Char(c)));
+        }
+
+        // Line is "❯ 👩‍🔬a🦀" (7 cols); a 3-col area needs scroll 5. Summing
+        // per-codepoint widths overshoots to 6, splitting the crab and
+        // parking the cursor inside it.
+        let mut terminal = Terminal::new(TestBackend::new(3, 1)).unwrap();
+        terminal.draw(|frame| render(frame, &editor)).unwrap();
+        terminal.backend().assert_buffer_lines(["🦀 "]);
+        assert_eq!(
+            terminal.get_cursor_position().unwrap(),
+            Position { x: 2, y: 0 }
+        );
     }
 }
