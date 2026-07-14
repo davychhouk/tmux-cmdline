@@ -1,28 +1,69 @@
 # tmux-cmdline
 
-A popup replacement for tmux's `prefix + :` command prompt.
+A themeable popup replacement for tmux's `prefix + :` command prompt.
+Catppuccin-aware, configured entirely through tmux options — no rebuild to
+retheme.
+
+```
+╭───────────── Tmux Cmdline ─────────────╮
+│  new-window -c ~/projects█            │
+╰────────────────────────────────────────╯
+```
 
 ## Requirements
 
 - tmux 3.3 or newer
-- A current stable Rust toolchain
+- A Rust toolchain to build the binary, or a prebuilt one from
+  [Releases](https://github.com/davychhouk/tmux-cmdline/releases)
+- A [Nerd Font](https://www.nerdfonts.com/) for the default prompt glyph
+  (or set your own with `@tmux-cmdline-prompt`)
 
 ## Install
 
-Build the binary:
+### TPM
 
-```sh
-cargo build --release
+Add the plugin to `~/.tmux.conf` and install with `prefix + I`:
+
+```tmux
+set -g @plugin 'davychhouk/tmux-cmdline'
 ```
 
-Load the plugin from `~/.tmux.conf`:
+Then build the binary once:
+
+```sh
+cd ~/.tmux/plugins/tmux-cmdline && cargo build --release
+```
+
+No Rust? Download the tarball for your platform from
+[Releases](https://github.com/davychhouk/tmux-cmdline/releases) and place the
+binary at `~/.tmux/plugins/tmux-cmdline/target/release/tmux-cmdline`.
+
+### Manual
+
+```sh
+git clone https://github.com/davychhouk/tmux-cmdline
+cd tmux-cmdline && cargo build --release
+```
+
+Load the plugin from `~/.tmux.conf` and reload tmux:
 
 ```tmux
 run-shell "/absolute/path/to/tmux-cmdline/tmux-cmdline.tmux"
 ```
 
-Reload tmux, then press `prefix + :`. Press Enter to execute, or Escape to
-cancel.
+## Usage
+
+Press `prefix + :` to open the popup.
+
+| Key               | Action                  |
+| ----------------- | ----------------------- |
+| `Enter`           | Execute the command     |
+| `Esc` / `Ctrl-c`  | Cancel                  |
+| `Ctrl-a` / `Home` | Start of line           |
+| `Ctrl-e` / `End`  | End of line             |
+| `Ctrl-u`          | Delete to start of line |
+| `Ctrl-k`          | Delete to end of line   |
+| `Ctrl-w`          | Delete previous word    |
 
 The command is parsed in the invoking client's command queue after the popup
 closes, so quoting, command sequences, and interactive tmux commands retain
@@ -70,3 +111,7 @@ set -g @tmux-cmdline-position "#{e|/:#{client_height},4}"  # quarter height
 Raw values are expanded when the popup opens, before `display-popup` runs, so
 `#{popup_*}` variables are not available in them — use `client_height` math
 or the named anchors instead.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
