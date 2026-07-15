@@ -4,7 +4,7 @@ A themeable popup replacement for tmux's `prefix + :` command prompt.
 Catppuccin-aware, configured entirely through tmux options — no rebuild to
 retheme.
 
-<img width="1512" height="947" alt="image" src="https://github.com/user-attachments/assets/74386dc3-8835-4c06-9746-0130e51bc6c1" />
+<img width="1511" height="949" alt="image" src="https://github.com/user-attachments/assets/8c5df83f-446a-4bed-9104-fec108aa53e7" />
 
 ## Requirements
 
