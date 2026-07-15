@@ -8,10 +8,9 @@ version=${version:-v0.1.0}
 binary="$root/target/release/tmux-cmdline"
 version_file="$root/target/release/.version"
 
-fail() {
+warn() {
     tmux display-message "tmux-cmdline: $*" 2>/dev/null ||
         printf 'tmux-cmdline: %s\n' "$*" >&2
-    exit 1
 }
 
 target() {
@@ -28,7 +27,13 @@ download() {
     if command -v curl >/dev/null 2>&1; then
         curl -fsSL --max-time 30 "$1" -o "$2"
     elif command -v wget >/dev/null 2>&1; then
-        wget -q -T 30 -O "$2" "$1"
+        # --tries caps GNU wget's 20-retry default; BusyBox wget lacks it and
+        # already makes a single attempt.
+        if wget --help 2>&1 | grep -q -- --tries; then
+            wget -q -T 30 --tries=1 -O "$2" "$1"
+        else
+            wget -q -T 30 -O "$2" "$1"
+        fi
     else
         return 1
     fi
@@ -57,15 +62,27 @@ fetch() {
     tar -xzf "$tmp/$asset" -C "$(dirname "$binary")"
 }
 
-installed=$(cat "$version_file" 2>/dev/null || true)
-if [ ! -x "$binary" ] || { [ -n "$installed" ] && [ "$installed" != "$version" ]; }; then
-    mkdir -p "$(dirname "$binary")" || fail "could not create binary directory"
+# Best-effort: on failure warn but keep going so the key still binds and any
+# existing binary keeps working; the popup script re-checks at press time.
+install() {
+    mkdir -p "$(dirname "$binary")" || { warn "could not create binary directory"; return 1; }
     if ! fetch; then
-        command -v cargo >/dev/null 2>&1 ||
-            fail "no prebuilt binary for $version; install Rust or select an available @tmux-cmdline-version"
-        (cd "$root" && cargo build --release) || fail "cargo build failed"
+        if command -v cargo >/dev/null 2>&1; then
+            (cd "$root" && cargo build --release) || { warn "cargo build failed"; return 1; }
+        elif target >/dev/null 2>&1; then
+            warn "could not download or verify the $version binary; check your network or install Rust"
+            return 1
+        else
+            warn "no prebuilt binary for $(uname -s)/$(uname -m); install Rust or select an available @tmux-cmdline-version"
+            return 1
+        fi
     fi
     printf '%s\n' "$version" >"$version_file"
+}
+
+installed=$(cat "$version_file" 2>/dev/null || true)
+if [ ! -x "$binary" ] || { [ -n "$installed" ] && [ "$installed" != "$version" ]; }; then
+    install || true
 fi
 
 command_dir=$(tmux show-option -gvq @tmux-cmdline-dir)
