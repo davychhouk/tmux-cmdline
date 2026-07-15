@@ -13,6 +13,8 @@ use unicode_width::UnicodeWidthStr;
 struct Editor {
     input: String,
     cursor: usize,
+    commands: String,
+    aliases: String,
 }
 
 enum Action {
@@ -95,7 +97,11 @@ fn main() -> io::Result<()> {
         .nth(1)
         .map(PathBuf::from)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing output file"))?;
-    let mut editor = Editor::default();
+    let mut editor = Editor {
+        commands: env::var("TCU_COMMANDS").unwrap_or_default(),
+        aliases: env::var("TCU_ALIASES").unwrap_or_default(),
+        ..Editor::default()
+    };
     let submitted = ratatui::run(|terminal| run(terminal, &mut editor))?;
 
     if submitted && !editor.input.trim().is_empty() {
@@ -119,6 +125,187 @@ fn run(terminal: &mut DefaultTerminal, editor: &mut Editor) -> io::Result<bool> 
             }
         }
     }
+}
+
+fn highlight<'a>(input: &'a str, commands: &str, aliases: &str, accent: Color) -> Vec<Span<'a>> {
+    let mut spans = Vec::new();
+    let mut start = 0;
+    let mut command = true;
+
+    while start < input.len() {
+        let rest = &input[start..];
+        let first = rest.chars().next().unwrap();
+        let mut style = Style::default();
+        let end = match first {
+            c if c.is_whitespace() => {
+                start
+                    + rest
+                        .find(|c: char| !c.is_whitespace())
+                        .unwrap_or(rest.len())
+            }
+            ';' if rest[1..].chars().next().is_none_or(char::is_whitespace) => {
+                command = true;
+                style = style.fg(accent);
+                start + 1
+            }
+            '{' | '}' => {
+                command = first == '{';
+                style = style.fg(accent);
+                start + 1
+            }
+            '\'' | '"' => {
+                let (end, closed) = quoted_end(input, start, first);
+                if command && closed {
+                    let word = &input[start + 1..end - 1];
+                    let dynamic = first == '"' && (word.contains('$') || word.contains('\\'));
+                    style = style
+                        .fg(if dynamic || valid_command(word, commands, aliases) {
+                            accent
+                        } else {
+                            Color::Red
+                        })
+                        .add_modifier(Modifier::BOLD);
+                } else {
+                    style = style.fg(Color::Green);
+                }
+                command = false;
+                end
+            }
+            '#' if rest.starts_with("#{") => {
+                command = false;
+                style = style.fg(Color::Magenta);
+                group_end(input, start + 1, '{', '}')
+            }
+            '#' if rest.starts_with("#[") => {
+                command = false;
+                style = style.fg(Color::Magenta);
+                group_end(input, start + 1, '[', ']')
+            }
+            '#' if rest.starts_with("#(") => {
+                command = false;
+                style = style.fg(Color::Magenta);
+                group_end(input, start + 1, '(', ')')
+            }
+            '#' => {
+                style = style.fg(Color::DarkGray);
+                input.len()
+            }
+            '$' => {
+                command = false;
+                style = style.fg(Color::Magenta);
+                variable_end(input, start)
+            }
+            _ => {
+                let end = word_end(input, start);
+                if command {
+                    command = false;
+                    style = style
+                        .fg(if valid_command(&input[start..end], commands, aliases) {
+                            accent
+                        } else {
+                            Color::Red
+                        })
+                        .add_modifier(Modifier::BOLD);
+                } else if first == '-' {
+                    style = style.fg(Color::Yellow);
+                }
+                end
+            }
+        };
+
+        spans.push(Span::styled(&input[start..end], style));
+        start = end;
+    }
+
+    spans
+}
+
+fn valid_command(word: &str, commands: &str, aliases: &str) -> bool {
+    if commands.is_empty()
+        || commands
+            .split_ascii_whitespace()
+            .chain(aliases.split_ascii_whitespace())
+            .any(|name| name == word)
+    {
+        return true;
+    }
+
+    let mut matches = commands
+        .lines()
+        .filter_map(|line| line.split_ascii_whitespace().next())
+        .filter(|name| name.starts_with(word));
+    matches.next().is_some() && matches.next().is_none()
+}
+
+fn quoted_end(input: &str, start: usize, quote: char) -> (usize, bool) {
+    let mut escaped = false;
+    for (offset, c) in input[start + quote.len_utf8()..].char_indices() {
+        if quote == '"' && !escaped && c == '\\' {
+            escaped = true;
+        } else if !escaped && c == quote {
+            return (start + quote.len_utf8() + offset + c.len_utf8(), true);
+        } else {
+            escaped = false;
+        }
+    }
+    (input.len(), false)
+}
+
+fn group_end(input: &str, open: usize, opening: char, closing: char) -> usize {
+    let mut depth = 0;
+    let mut escaped = false;
+    for (offset, c) in input[open..].char_indices() {
+        if !escaped && c == '\\' {
+            escaped = true;
+            continue;
+        }
+        if !escaped && c == opening {
+            depth += 1;
+        } else if !escaped && c == closing {
+            depth -= 1;
+            if depth == 0 {
+                return open + offset + c.len_utf8();
+            }
+        }
+        escaped = false;
+    }
+    input.len()
+}
+
+fn variable_end(input: &str, start: usize) -> usize {
+    let rest = &input[start + 1..];
+    if rest.starts_with('{') {
+        return group_end(input, start + 1, '{', '}');
+    }
+    start
+        + 1
+        + rest
+            .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .unwrap_or(rest.len())
+}
+
+fn word_end(input: &str, start: usize) -> usize {
+    let mut escaped = false;
+    for (offset, c) in input[start..].char_indices() {
+        if escaped {
+            escaped = false;
+        } else if c == '\\' {
+            escaped = true;
+        // offset > 0: never stop on the first char, so a word always makes
+        // forward progress even when it starts with a delimiter.
+        } else if offset > 0
+            && (c.is_whitespace()
+                || "{}'\"#$".contains(c)
+                || c == ';'
+                    && input[start + offset + 1..]
+                        .chars()
+                        .next()
+                        .is_none_or(char::is_whitespace))
+        {
+            return start + offset;
+        }
+    }
+    input.len()
 }
 
 fn render(frame: &mut Frame, editor: &Editor) {
@@ -148,10 +335,14 @@ fn render(frame: &mut Frame, editor: &Editor) {
         }
         scroll += grapheme.width() as u16;
     }
-    let line = Line::from(vec![
-        Span::styled(prompt.as_str(), Style::default().fg(accent)),
-        Span::raw(&editor.input),
-    ]);
+    let mut spans = vec![Span::styled(prompt.as_str(), Style::default().fg(accent))];
+    spans.extend(highlight(
+        &editor.input,
+        &editor.commands,
+        &editor.aliases,
+        accent,
+    ));
+    let line = Line::from(spans);
 
     frame.render_widget(Paragraph::new(line).scroll((0, scroll)), area);
     frame.set_cursor_position((area.x + cursor - scroll, area.y));
@@ -186,12 +377,12 @@ mod tests {
     #[test]
     fn scroll_never_splits_a_wide_character() {
         let mut editor = Editor::default();
-        for c in "🦀🦀🦀".chars() {
+        for c in "x 🦀🦀🦀".chars() {
             editor.handle(key(KeyCode::Char(c)));
         }
 
-        // Line is "❯ 🦀🦀🦀" (8 cols); a 6-col area wants scroll 3, which
-        // would cut the first crab in half. Snapping moves it to 4.
+        // Line is "❯ x 🦀🦀🦀" (10 cols); a 6-col area wants scroll 5,
+        // which would cut the first crab in half. Snapping moves it to 6.
         let mut terminal = Terminal::new(TestBackend::new(6, 1)).unwrap();
         terminal.draw(|frame| render(frame, &editor)).unwrap();
         terminal.backend().assert_buffer_lines(["🦀🦀  "]);
@@ -204,12 +395,12 @@ mod tests {
         assert_eq!("👩‍🔬".width(), 2);
 
         let mut editor = Editor::default();
-        for c in "👩‍🔬a🦀".chars() {
+        for c in "x 👩‍🔬a🦀".chars() {
             editor.handle(key(KeyCode::Char(c)));
         }
 
-        // Line is "❯ 👩‍🔬a🦀" (7 cols); a 3-col area needs scroll 5. Summing
-        // per-codepoint widths overshoots to 6, splitting the crab and
+        // Line is "❯ x 👩‍🔬a🦀" (9 cols); a 3-col area needs scroll 7. Summing
+        // per-codepoint widths overshoots to 8, splitting the crab and
         // parking the cursor inside it.
         let mut terminal = Terminal::new(TestBackend::new(3, 1)).unwrap();
         terminal.draw(|frame| render(frame, &editor)).unwrap();
@@ -217,6 +408,54 @@ mod tests {
         assert_eq!(
             terminal.get_cursor_position().unwrap(),
             Position { x: 2, y: 0 }
+        );
+    }
+
+    #[test]
+    fn highlights_tmux_lexical_syntax() {
+        let spans = highlight(
+            "new-w -n 'work' -c $HOME ; display-message foo;bar ; nwe ; \"new-window\" -n foo ; \"nwe\" -n foo ; $TMUX_CMD -t target ; #{command} -t target # note",
+            "new-session new\nnew-window neww\ndisplay-message display",
+            "sv",
+            Color::Cyan,
+        );
+        let styled: Vec<_> = spans
+            .iter()
+            .filter(|span| !span.content.trim().is_empty())
+            .map(|span| (span.content.as_ref(), span.style.fg))
+            .collect();
+
+        assert_eq!(
+            styled,
+            [
+                ("new-w", Some(Color::Cyan)),
+                ("-n", Some(Color::Yellow)),
+                ("'work'", Some(Color::Green)),
+                ("-c", Some(Color::Yellow)),
+                ("$HOME", Some(Color::Magenta)),
+                (";", Some(Color::Cyan)),
+                ("display-message", Some(Color::Cyan)),
+                ("foo;bar", None),
+                (";", Some(Color::Cyan)),
+                ("nwe", Some(Color::Red)),
+                (";", Some(Color::Cyan)),
+                ("\"new-window\"", Some(Color::Cyan)),
+                ("-n", Some(Color::Yellow)),
+                ("foo", None),
+                (";", Some(Color::Cyan)),
+                ("\"nwe\"", Some(Color::Red)),
+                ("-n", Some(Color::Yellow)),
+                ("foo", None),
+                (";", Some(Color::Cyan)),
+                ("$TMUX_CMD", Some(Color::Magenta)),
+                ("-t", Some(Color::Yellow)),
+                ("target", None),
+                (";", Some(Color::Cyan)),
+                ("#{command}", Some(Color::Magenta)),
+                ("-t", Some(Color::Yellow)),
+                ("target", None),
+                ("# note", Some(Color::DarkGray)),
+            ]
         );
     }
 }

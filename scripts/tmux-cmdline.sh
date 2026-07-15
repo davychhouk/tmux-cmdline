@@ -28,6 +28,11 @@ prompt=$(opt prompt '' ' ')
 title=$(opt title '' ' Tmux Cmdline ')
 width=$(opt width '' '40%')
 border=$(opt border '' rounded)
+commands=$(
+  tmux list-commands -F '#{command_list_name} #{command_list_alias}'
+)
+# || true: command-alias may be unset, and set -e would abort the popup.
+aliases=$(tmux show-options -sv command-alias 2>/dev/null | sed 's/=.*//' || true)
 
 # Named positions become format arithmetic so a signed row offset can shift
 # them (positive = down, negative = up). -y is the popup's bottom edge.
@@ -42,6 +47,8 @@ esac
 
 tmux display-popup -E -w "$width" -h 3 -x C -y "$y" \
   -e "TCU_ACCENT=$accent" -e "TCU_PROMPT=$prompt" \
+  -e "TCU_COMMANDS=$commands" \
+  -e "TCU_ALIASES=$aliases" \
   -b "$border" \
   -s "bg=$bg,fg=$fg" \
   -S "fg=$accent,bg=$bg" \

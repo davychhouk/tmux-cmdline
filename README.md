@@ -9,8 +9,8 @@ retheme.
 ## Requirements
 
 - tmux 3.3 or newer
-- A Rust toolchain to build the binary, or a prebuilt one from
-  [Releases](https://github.com/davychhouk/tmux-cmdline/releases)
+- `curl` or `wget` to download a prebuilt binary, or a Rust toolchain as a
+  fallback
 - A [Nerd Font](https://www.nerdfonts.com/) for the default prompt glyph
   (or set your own with `@tmux-cmdline-prompt`)
 
@@ -24,15 +24,9 @@ Add the plugin to `~/.tmux.conf` and install with `prefix + I`:
 set -g @plugin 'davychhouk/tmux-cmdline'
 ```
 
-Then build the binary once:
-
-```sh
-cd ~/.tmux/plugins/tmux-cmdline && cargo build --release
-```
-
-No Rust? Download the tarball for your platform from
-[Releases](https://github.com/davychhouk/tmux-cmdline/releases) and place the
-binary at `~/.tmux/plugins/tmux-cmdline/target/release/tmux-cmdline`.
+The plugin downloads and verifies the `v0.1.1` prebuilt binary on first load.
+If that fails, it falls back to `cargo build --release` when Rust is installed.
+Set `@tmux-cmdline-version` to select another release.
 
 ### Manual
 
@@ -46,6 +40,18 @@ Load the plugin from `~/.tmux.conf` and reload tmux:
 ```tmux
 run-shell "/absolute/path/to/tmux-cmdline/tmux-cmdline.tmux"
 ```
+
+## Development
+
+Build and load the current checkout from the repository root:
+
+```sh
+cargo build --release
+tmux run-shell "$PWD/tmux-cmdline.tmux"
+```
+
+Press `prefix + :` to test it. Rebuild after Rust changes; rerun `run-shell`
+after changing the tmux or shell scripts.
 
 ## Usage
 
