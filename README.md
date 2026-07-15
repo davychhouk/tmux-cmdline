@@ -47,6 +47,18 @@ Load the plugin from `~/.tmux.conf` and reload tmux:
 run-shell "/absolute/path/to/tmux-cmdline/tmux-cmdline.tmux"
 ```
 
+## Development
+
+Build and load the current checkout from the repository root:
+
+```sh
+cargo build --release
+tmux run-shell "$PWD/tmux-cmdline.tmux"
+```
+
+Press `prefix + :` to test it. Rebuild after Rust changes; rerun `run-shell`
+after changing the tmux or shell scripts.
+
 ## Usage
 
 Press `prefix + :` to open the popup.
