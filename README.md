@@ -24,7 +24,7 @@ Add the plugin to `~/.tmux.conf` and install with `prefix + I`:
 set -g @plugin 'davychhouk/tmux-cmdline'
 ```
 
-The plugin downloads and verifies the `v0.1.0` prebuilt binary on first load.
+The plugin downloads and verifies the `v0.1.1` prebuilt binary on first load.
 If that fails, it falls back to `cargo build --release` when Rust is installed.
 Set `@tmux-cmdline-version` to select another release.
 

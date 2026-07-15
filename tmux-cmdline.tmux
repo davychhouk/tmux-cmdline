@@ -3,14 +3,22 @@ set -eu
 
 root=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repo=davychhouk/tmux-cmdline
-version=$(tmux show-option -gqv @tmux-cmdline-version)
-version=${version:-v0.1.0}
+requested=$(tmux show-option -gqv @tmux-cmdline-version)
+version=${requested:-v0.1.1}
 binary="$root/target/release/tmux-cmdline"
 version_file="$root/target/release/.version"
+failure_file="$root/target/release/.failed-version"
+commit=$(git -C "$root" rev-parse HEAD 2>/dev/null || printf unknown)
+source_version="source:$commit"
+attempt="$version:$commit"
 
 warn() {
     tmux display-message "tmux-cmdline: $*" 2>/dev/null ||
         printf 'tmux-cmdline: %s\n' "$*" >&2
+}
+
+remember_failure() {
+    printf '%s\n' "$attempt" >"$failure_file" || true
 }
 
 target() {
@@ -66,22 +74,39 @@ fetch() {
 # existing binary keeps working; the popup script re-checks at press time.
 install() {
     mkdir -p "$(dirname "$binary")" || { warn "could not create binary directory"; return 1; }
-    if ! fetch; then
-        if command -v cargo >/dev/null 2>&1; then
-            (cd "$root" && cargo build --release) || { warn "cargo build failed"; return 1; }
-        elif target >/dev/null 2>&1; then
-            warn "could not download or verify the $version binary; check your network or install Rust"
-            return 1
-        else
-            warn "no prebuilt binary for $(uname -s)/$(uname -m); install Rust or select an available @tmux-cmdline-version"
-            return 1
-        fi
+    if fetch; then
+        installed=$version
+        rm -f "$failure_file"
+    elif command -v cargo >/dev/null 2>&1 && { [ -z "$requested" ] || [ ! -x "$binary" ]; }; then
+        (cd "$root" && cargo build --release) || { warn "cargo build failed"; return 1; }
+        installed=$source_version
+        remember_failure
+        warn "using a source build because the $version binary could not be installed"
+    elif [ -x "$binary" ]; then
+        remember_failure
+        warn "could not install $version; keeping the existing binary"
+        return 1
+    elif target >/dev/null 2>&1; then
+        warn "could not download or verify the $version binary; check your network or install Rust"
+        return 1
+    else
+        warn "no prebuilt binary for $(uname -s)/$(uname -m); install Rust or select an available @tmux-cmdline-version"
+        return 1
     fi
-    printf '%s\n' "$version" >"$version_file"
+    printf '%s\n' "$installed" >"$version_file"
 }
 
+# Verified downloads use the release tag; Cargo fallbacks use their source
+# commit. An empty marker belongs to a user-managed local build.
 installed=$(cat "$version_file" 2>/dev/null || true)
-if [ ! -x "$binary" ] || { [ -n "$installed" ] && [ "$installed" != "$version" ]; }; then
+failed=$(cat "$failure_file" 2>/dev/null || true)
+if [ ! -x "$binary" ]; then
+    install || true
+elif [ -n "$requested" ] && [ "$installed" != "$version" ] && [ "$failed" != "$attempt" ]; then
+    install || true
+elif [ -z "$requested" ] && [ -n "$installed" ] &&
+    [ "$installed" != "$version" ] && [ "$installed" != "$source_version" ] &&
+    [ "$failed" != "$attempt" ]; then
     install || true
 fi
 
