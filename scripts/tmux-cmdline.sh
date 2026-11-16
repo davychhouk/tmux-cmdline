@@ -84,7 +84,7 @@ if [ ! -x "$binary" ]; then
 fi
 
 accent=$(opt accent '#{@thm_blue}' cyan)
-prompt=$(opt prompt '' ' ')
+prompt=$(opt prompt '' ' ')
 title=$(opt title '' ' Tmux Cmdline ')
 width=$(opt width '' '40%')
 history=$(opt history-file '' "${XDG_STATE_HOME:-$HOME/.local/state}/tmux-cmdline/history")
