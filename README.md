@@ -74,7 +74,7 @@ tmux run-shell "$PWD/tmux-cmdline.tmux"
 ```
 
 Press `prefix + :` to test it. Rebuild after Rust changes; rerun `run-shell`
-after changing the tmux or shell scripts.
+after changing the tmux or shell scripts. Run the unit tests with `cargo test`.
 
 ## Usage
 
@@ -101,11 +101,16 @@ The command is parsed in the invoking client's command queue after the popup
 closes, so quoting, command sequences, and interactive tmux commands retain
 their native behavior.
 
+`Tab` completes the command name at the cursor: at the start of the line or
+after a `;` or `{` separator. A unique match is completed with a trailing
+space; several matches extend to their common prefix, then `Tab` / `Shift-Tab`
+cycle through them. Arguments are not completed.
+
 History navigation only shows entries starting with the text typed before the
 first `Up`; with nothing typed, it walks all history.
 
-Executed commands are saved (last 100, consecutive duplicates skipped) to
-`$XDG_STATE_HOME/tmux-cmdline/history`, falling back to
+Submitted commands are saved (last 100, empty and consecutive duplicates
+skipped) to `$XDG_STATE_HOME/tmux-cmdline/history`, falling back to
 `~/.local/state/tmux-cmdline/history`. Override the path with:
 
 ```tmux
@@ -119,7 +124,7 @@ plain terminal colors. Override any of these in `~/.tmux.conf` (values are
 format-expanded, so `#{@thm_*}` references work):
 
 ```tmux
-set -g @tmux-cmdline-accent "#{@thm_blue}"      # border, title, prompt
+set -g @tmux-cmdline-accent "#{@thm_blue}"      # border, title, prompt, command names
 set -g @tmux-cmdline-bg     "#{@thm_base}"      # popup background
 set -g @tmux-cmdline-fg     "#{@thm_fg}"        # input text
 set -g @tmux-cmdline-prompt " "                # prompt glyph
