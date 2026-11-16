@@ -42,8 +42,8 @@ impl Editor {
                 KeyCode::Char('k') => self.input.truncate(self.cursor),
                 KeyCode::Char('w') => self.delete_word(),
                 KeyCode::Char('c') => return Action::Cancel,
-                KeyCode::Char('p') => self.recall(-1),
-                KeyCode::Char('n') => self.recall(1),
+                KeyCode::Char('p') => self.recall(true),
+                KeyCode::Char('n') => self.recall(false),
                 _ => return Action::Continue,
             }
             return Action::Continue;
@@ -58,8 +58,8 @@ impl Editor {
             KeyCode::Right => self.cursor = self.next_boundary(),
             KeyCode::Home => self.cursor = 0,
             KeyCode::End => self.cursor = self.input.len(),
-            KeyCode::Up => self.recall(-1),
-            KeyCode::Down => self.recall(1),
+            KeyCode::Up => self.recall(true),
+            KeyCode::Down => self.recall(false),
             KeyCode::Backspace if self.cursor > 0 => {
                 let previous = self.previous_boundary();
                 self.input.drain(previous..self.cursor);
@@ -76,22 +76,32 @@ impl Editor {
         Action::Continue
     }
 
-    fn recall(&mut self, step: isize) {
-        let Some(index) = self
-            .index
-            .checked_add_signed(step)
-            .filter(|&i| i <= self.history.len())
-        else {
-            return;
-        };
-        if self.index == self.history.len() {
-            self.draft = std::mem::take(&mut self.input);
+    // Only entries starting with the draft match, so an empty draft walks all history.
+    fn recall(&mut self, up: bool) {
+        let len = self.history.len();
+        if self.index == len {
+            self.draft = self.input.clone();
         }
-        self.index = index;
-        self.input = match self.history.get(index) {
-            Some(entry) => entry.clone(),
-            None => std::mem::take(&mut self.draft),
+        let matches = |entry: &String| entry.starts_with(&self.draft);
+        let found = if up {
+            self.history[..self.index].iter().rposition(matches)
+        } else {
+            self.history
+                .get(self.index + 1..)
+                .and_then(|rest| rest.iter().position(matches))
+                .map(|i| i + self.index + 1)
         };
+        match found {
+            Some(index) => {
+                self.index = index;
+                self.input = self.history[index].clone();
+            }
+            None if !up && self.index < len => {
+                self.index = len;
+                self.input = std::mem::take(&mut self.draft);
+            }
+            None => return,
+        }
         self.cursor = self.input.len();
     }
 
@@ -427,13 +437,12 @@ mod tests {
     }
 
     #[test]
-    fn cycles_history_and_restores_draft() {
+    fn cycles_history_without_modifying_it() {
         let mut editor = Editor {
             history: vec!["neww".into(), "splitw".into()],
             index: 2,
             ..Editor::default()
         };
-        editor.handle(key(KeyCode::Char('x')));
         editor.handle(key(KeyCode::Up));
         assert_eq!(editor.input, "splitw");
         assert_eq!(editor.cursor, 6);
@@ -444,8 +453,30 @@ mod tests {
         editor.handle(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
         editor.handle(key(KeyCode::Down));
         editor.handle(key(KeyCode::Down));
-        assert_eq!(editor.input, "x");
+        assert_eq!(editor.input, "");
         assert_eq!(editor.history, ["neww", "splitw"]);
+    }
+
+    #[test]
+    fn filters_history_by_draft_prefix() {
+        let mut editor = Editor {
+            history: vec!["neww".into(), "splitw".into(), "new-session".into()],
+            index: 3,
+            ..Editor::default()
+        };
+        for c in "new".chars() {
+            editor.handle(key(KeyCode::Char(c)));
+        }
+        editor.handle(key(KeyCode::Up));
+        assert_eq!(editor.input, "new-session");
+        editor.handle(key(KeyCode::Up));
+        editor.handle(key(KeyCode::Up));
+        assert_eq!(editor.input, "neww");
+        editor.handle(key(KeyCode::Down));
+        assert_eq!(editor.input, "new-session");
+        editor.handle(key(KeyCode::Down));
+        assert_eq!(editor.input, "new");
+        assert_eq!(editor.cursor, 3);
     }
 
     #[test]

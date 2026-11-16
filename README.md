@@ -17,7 +17,8 @@ retheme.
 - **Readline-style editing** — `Ctrl-a/e/u/k/w`, arrows, `Home`/`End`, with
   Unicode-aware cursor movement and scrolling.
 - **Command history** — `Up`/`Down` (or `Ctrl-p`/`Ctrl-n`) cycle past
-  commands, persisted across popups and tmux restarts.
+  commands, filtered by what you've typed, persisted across popups and tmux
+  restarts.
 - **Alerts** — command output and errors appear in a notification alert.
 - **Theming** — Catppuccin-aware colors, prompt, title, border, and width via
   tmux options.
@@ -95,6 +96,9 @@ Press `prefix + :` to open the popup.
 The command is parsed in the invoking client's command queue after the popup
 closes, so quoting, command sequences, and interactive tmux commands retain
 their native behavior.
+
+History navigation only shows entries starting with the text typed before the
+first `Up`; with nothing typed, it walks all history.
 
 Executed commands are saved (last 100, consecutive duplicates skipped) to
 `$XDG_STATE_HOME/tmux-cmdline/history`, falling back to
