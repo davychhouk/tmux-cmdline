@@ -19,6 +19,13 @@ struct Editor {
     // history.len() means the unsent draft is shown.
     index: usize,
     draft: String,
+    completion: Option<Completion>,
+}
+
+struct Completion {
+    start: usize,
+    matches: Vec<String>,
+    index: usize,
 }
 
 const HISTORY_LIMIT: usize = 100;
@@ -31,6 +38,9 @@ enum Action {
 
 impl Editor {
     fn handle(&mut self, key: KeyEvent) -> Action {
+        if !matches!(key.code, KeyCode::Tab | KeyCode::BackTab) {
+            self.completion = None;
+        }
         if key.modifiers.contains(KeyModifiers::CONTROL) {
             match key.code {
                 KeyCode::Char('a') => self.cursor = 0,
@@ -60,6 +70,8 @@ impl Editor {
             KeyCode::End => self.cursor = self.input.len(),
             KeyCode::Up => self.recall(true),
             KeyCode::Down => self.recall(false),
+            KeyCode::Tab => self.complete(true),
+            KeyCode::BackTab => self.complete(false),
             KeyCode::Backspace if self.cursor > 0 => {
                 let previous = self.previous_boundary();
                 self.input.drain(previous..self.cursor);
@@ -103,6 +115,92 @@ impl Editor {
             None => return,
         }
         self.cursor = self.input.len();
+    }
+
+    fn complete(&mut self, forward: bool) {
+        if let Some(completion) = &mut self.completion {
+            let len = completion.matches.len();
+            completion.index = (completion.index + if forward { 1 } else { len - 1 }) % len;
+            let (start, choice) = (
+                completion.start,
+                completion.matches[completion.index].clone(),
+            );
+            self.replace_word(start, &choice);
+            return;
+        }
+
+        let Some(start) = self.command_start() else {
+            return;
+        };
+        let word = &self.input[start..self.cursor];
+        let mut matches: Vec<String> = self
+            .commands
+            .split_ascii_whitespace()
+            .chain(self.aliases.split_ascii_whitespace())
+            .filter(|name| name.starts_with(word))
+            .map(String::from)
+            .collect();
+        matches.sort();
+        matches.dedup();
+
+        match matches.as_slice() {
+            [] => {}
+            [only] => {
+                let spaced = self.input[self.cursor..].starts_with(char::is_whitespace);
+                self.replace_word(start, only);
+                if !spaced {
+                    self.input.insert(self.cursor, ' ');
+                }
+                self.cursor = self.next_boundary();
+            }
+            [first, rest @ ..] => {
+                let mut common = rest.iter().fold(first.len(), |n, name| {
+                    first
+                        .bytes()
+                        .zip(name.bytes())
+                        .take(n)
+                        .take_while(|(a, b)| a == b)
+                        .count()
+                });
+                while !first.is_char_boundary(common) {
+                    common -= 1;
+                }
+                if common > word.len() {
+                    self.replace_word(start, &first[..common]);
+                } else {
+                    // Step from the typed word if it is itself a match, so no Tab is wasted on it.
+                    let index = matches
+                        .iter()
+                        .position(|name| name == word)
+                        .unwrap_or(if forward { matches.len() - 1 } else { 0 });
+                    self.completion = Some(Completion {
+                        start,
+                        matches,
+                        index,
+                    });
+                    self.complete(forward);
+                }
+            }
+        }
+    }
+
+    // A command word starts the line or follows a `;` or `{` separator, and the cursor ends it.
+    fn command_start(&self) -> Option<usize> {
+        if self.input[self.cursor..].starts_with(|c: char| !c.is_whitespace()) {
+            return None;
+        }
+        let before = &self.input[..self.cursor];
+        let start = before
+            .char_indices()
+            .rfind(|&(_, c)| c.is_whitespace() || c == '{')
+            .map_or(0, |(index, c)| index + c.len_utf8());
+        let previous = before[..start].trim_end();
+        (previous.is_empty() || previous.ends_with(['{', ';'])).then_some(start)
+    }
+
+    fn replace_word(&mut self, start: usize, replacement: &str) {
+        self.input.replace_range(start..self.cursor, replacement);
+        self.cursor = start + replacement.len();
     }
 
     fn record(&mut self) {
@@ -480,6 +578,31 @@ mod tests {
     }
 
     #[test]
+    fn history_navigation_stops_at_the_ends() {
+        let mut editor = Editor::default();
+        editor.handle(key(KeyCode::Char('x')));
+        editor.handle(key(KeyCode::Up));
+        editor.handle(key(KeyCode::Down));
+        assert_eq!(editor.input, "x");
+
+        let mut editor = Editor {
+            history: vec!["neww".into(), "splitw".into()],
+            index: 2,
+            ..Editor::default()
+        };
+        for _ in 0..3 {
+            editor.handle(key(KeyCode::Up));
+        }
+        assert_eq!(editor.input, "neww");
+        assert_eq!(editor.index, 0);
+        for _ in 0..3 {
+            editor.handle(key(KeyCode::Down));
+        }
+        assert_eq!(editor.input, "");
+        assert_eq!(editor.index, 2);
+    }
+
+    #[test]
     fn records_without_consecutive_duplicates_and_caps() {
         let mut editor = Editor {
             history: (0..HISTORY_LIMIT).map(|i| i.to_string()).collect(),
@@ -491,6 +614,90 @@ mod tests {
         assert_eq!(editor.history.len(), HISTORY_LIMIT);
         assert_eq!(editor.history.first().unwrap(), "1");
         assert_eq!(editor.history.last().unwrap(), "neww");
+    }
+
+    fn completing(input: &str) -> Editor {
+        let mut editor = Editor {
+            commands:
+                "new-session new\nnew-window neww\nsplit-window splitw\nselect-window selectw"
+                    .into(),
+            aliases: "sv".into(),
+            ..Editor::default()
+        };
+        for c in input.chars() {
+            editor.handle(key(KeyCode::Char(c)));
+        }
+        editor
+    }
+
+    #[test]
+    fn tab_completes_unique_command_and_alias() {
+        let mut editor = completing("new-w");
+        editor.handle(key(KeyCode::Tab));
+        assert_eq!(editor.input, "new-window ");
+        assert_eq!(editor.cursor, editor.input.len());
+
+        let mut editor = completing("s");
+        editor.handle(key(KeyCode::Char('v')));
+        editor.handle(key(KeyCode::Tab));
+        assert_eq!(editor.input, "sv ");
+    }
+
+    #[test]
+    fn tab_extends_common_prefix_then_cycles() {
+        let mut editor = completing("neww ; spl");
+        editor.handle(key(KeyCode::Tab));
+        assert_eq!(editor.input, "neww ; split");
+        editor.handle(key(KeyCode::Tab));
+        assert_eq!(editor.input, "neww ; split-window");
+        editor.handle(key(KeyCode::Tab));
+        assert_eq!(editor.input, "neww ; splitw");
+        editor.handle(key(KeyCode::Tab));
+        assert_eq!(editor.input, "neww ; split-window");
+        editor.handle(key(KeyCode::BackTab));
+        assert_eq!(editor.input, "neww ; splitw");
+        editor.handle(key(KeyCode::Char(' ')));
+        editor.handle(key(KeyCode::Tab));
+        assert_eq!(editor.input, "neww ; splitw ");
+    }
+
+    #[test]
+    fn tab_cycle_skips_the_typed_word() {
+        let mut editor = completing("new");
+        editor.handle(key(KeyCode::Tab));
+        assert_eq!(editor.input, "new-session");
+        editor.handle(key(KeyCode::BackTab));
+        editor.handle(key(KeyCode::BackTab));
+        assert_eq!(editor.input, "neww");
+    }
+
+    #[test]
+    fn tab_completes_mid_line_and_skips_mid_word() {
+        let mut editor = completing("new-w -d");
+        for _ in 0..3 {
+            editor.handle(key(KeyCode::Left));
+        }
+        editor.handle(key(KeyCode::Tab));
+        assert_eq!(editor.input, "new-window -d");
+        assert_eq!(editor.cursor, "new-window ".len());
+
+        let mut editor = completing("new-w");
+        editor.handle(key(KeyCode::Left));
+        editor.handle(key(KeyCode::Tab));
+        assert_eq!(editor.input, "new-w");
+        assert_eq!(editor.cursor, 4);
+    }
+
+    #[test]
+    fn tab_ignores_arguments_and_unknown_words() {
+        for input in ["neww -n ne", "xyz", "{neww} ne"] {
+            let mut editor = completing(input);
+            editor.handle(key(KeyCode::Tab));
+            assert_eq!(editor.input, input);
+        }
+        let mut editor = completing("if 'true' { sel");
+        editor.handle(key(KeyCode::Tab));
+        assert_eq!(editor.input, "if 'true' { select");
     }
 
     #[test]
