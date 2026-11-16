@@ -66,10 +66,20 @@ Press `prefix + :` to open the popup.
 | `Ctrl-u`          | Delete to start of line |
 | `Ctrl-k`          | Delete to end of line   |
 | `Ctrl-w`          | Delete previous word    |
+| `Up` / `Ctrl-p`   | Previous history entry  |
+| `Down` / `Ctrl-n` | Next history entry      |
 
 The command is parsed in the invoking client's command queue after the popup
 closes, so quoting, command sequences, and interactive tmux commands retain
 their native behavior.
+
+Executed commands are saved (last 100, consecutive duplicates skipped) to
+`$XDG_STATE_HOME/tmux-cmdline/history`, falling back to
+`~/.local/state/tmux-cmdline/history`. Override the path with:
+
+```tmux
+set -g @tmux-cmdline-history-file "$HOME/.tmux-cmdline-history"
+```
 
 ## Theming
 
