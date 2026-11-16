@@ -6,6 +6,26 @@ retheme.
 
 <img width="1511" height="949" alt="image" src="https://github.com/user-attachments/assets/8c5df83f-446a-4bed-9104-fec108aa53e7" />
 
+## Features
+
+- **Popup prompt** — replaces `prefix + :` with a floating input; commands
+  run with tmux's native parsing, so quoting and sequences behave as usual.
+- **Syntax highlighting** — commands, flags, strings, variables, formats, and
+  comments are colored as you type.
+- **Command validation** — command names that are unknown or an ambiguous
+  prefix are shown in red before you run them; aliases count as known.
+- **Readline-style editing** — `Ctrl-a/e/u/k/w`, arrows, `Home`/`End`, with
+  Unicode-aware cursor movement and scrolling.
+- **Command history** — `Up`/`Down` (or `Ctrl-p`/`Ctrl-n`) cycle past
+  commands, persisted across popups and tmux restarts.
+- **Alerts** — command output and errors appear in a notification alert.
+- **Theming** — Catppuccin-aware colors, prompt, title, border, and width via
+  tmux options.
+- **Positioning** — top/center/bottom anchors with a row offset, or any raw
+  `display-popup -y` value.
+- **Prebuilt binaries** — for macOS and Linux (x86_64, arm64), downloaded and
+  checksum-verified on first load, with a Cargo fallback.
+
 ## Requirements
 
 - tmux 3.3 or newer
@@ -63,6 +83,9 @@ Press `prefix + :` to open the popup.
 | `Esc` / `Ctrl-c`  | Cancel                  |
 | `Ctrl-a` / `Home` | Start of line           |
 | `Ctrl-e` / `End`  | End of line             |
+| `Left` / `Right`  | Move cursor             |
+| `Backspace`       | Delete previous char    |
+| `Delete`          | Delete next char        |
 | `Ctrl-u`          | Delete to start of line |
 | `Ctrl-k`          | Delete to end of line   |
 | `Ctrl-w`          | Delete previous word    |
@@ -103,7 +126,7 @@ set -g @tmux-cmdline-border "rounded"           # popup border lines
 
 Messages and errors from a command run through the popup (e.g.
 `can't find window`, `display-message` output, parse errors) are shown in a
-noice-style alert in the top-right corner. It closes after a timeout or on any
+notification alert in the top-right corner. It closes after a timeout or on any
 key.
 
 ```tmux
