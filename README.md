@@ -89,6 +89,23 @@ set -g @tmux-cmdline-offset   "-6"              # rows to shift position: negati
 set -g @tmux-cmdline-border "rounded"           # popup border lines
 ```
 
+## Alerts
+
+Messages and errors from a command run through the popup (e.g.
+`can't find window`, `display-message` output, parse errors) are shown in a
+noice-style alert in the top-right corner. It closes after a timeout or on any
+key.
+
+```tmux
+set -g @tmux-cmdline-alert         "on"            # off keeps tmux's status-line message only
+set -g @tmux-cmdline-alert-timeout "3000"          # ms, max 25500
+set -g @tmux-cmdline-alert-error   "#{@thm_red}"   # border/title color on error
+set -g @tmux-cmdline-alert-info    "#{@thm_blue}"  # border/title color otherwise
+set -g @tmux-cmdline-alert-min-width  "40"         # cols or % of client width
+set -g @tmux-cmdline-alert-max-width  "80"         # cols or %; longer lines wrap
+set -g @tmux-cmdline-alert-max-height "10"         # rows or %; extra lines are cut
+```
+
 ## Positioning
 
 `position` picks a named anchor; `offset` shifts it by signed rows (negative =
