@@ -16,6 +16,8 @@ retheme.
   prefix are shown in red before you run them; aliases count as known.
 - **Readline-style editing** — `Ctrl-a/e/u/k/w`, arrows, `Home`/`End`, with
   Unicode-aware cursor movement and scrolling.
+- **Tab completion** — `Tab` completes command names and aliases, extending
+  to the common prefix, then cycling through matches.
 - **Command history** — `Up`/`Down` (or `Ctrl-p`/`Ctrl-n`) cycle past
   commands, filtered by what you've typed, persisted across popups and tmux
   restarts.
@@ -90,6 +92,8 @@ Press `prefix + :` to open the popup.
 | `Ctrl-u`          | Delete to start of line |
 | `Ctrl-k`          | Delete to end of line   |
 | `Ctrl-w`          | Delete previous word    |
+| `Tab`             | Complete command name   |
+| `Shift-Tab`       | Previous completion     |
 | `Up` / `Ctrl-p`   | Previous history entry  |
 | `Down` / `Ctrl-n` | Next history entry      |
 
