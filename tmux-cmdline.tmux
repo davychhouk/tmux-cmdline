@@ -4,7 +4,7 @@ set -eu
 root=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repo=davychhouk/tmux-cmdline
 requested=$(tmux show-option -gqv @tmux-cmdline-version)
-version=${requested:-v0.2.0}
+version=${requested:-v0.3.0}
 binary="$root/target/release/tmux-cmdline"
 version_file="$root/target/release/.version"
 failure_file="$root/target/release/.failed-version"
