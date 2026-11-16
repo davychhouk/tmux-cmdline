@@ -119,6 +119,6 @@ fi
 command_file="$command_dir/#{client_pid}"
 
 tmux bind-key : \
-    run-shell "$root/scripts/tmux-cmdline.sh '$command_file'" '\;' \
+    run-shell "$root/scripts/tmux-cmdline.sh '$command_file' '#{client_name}'" '\;' \
     run-shell -C "source-file '$command_file'" '\;' \
-    run-shell "rm -f '$command_file'"
+    run-shell "$root/scripts/tmux-cmdline.sh alert '$command_file' '#{client_name}'"
