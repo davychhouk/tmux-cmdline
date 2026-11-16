@@ -578,6 +578,31 @@ mod tests {
     }
 
     #[test]
+    fn history_navigation_stops_at_the_ends() {
+        let mut editor = Editor::default();
+        editor.handle(key(KeyCode::Char('x')));
+        editor.handle(key(KeyCode::Up));
+        editor.handle(key(KeyCode::Down));
+        assert_eq!(editor.input, "x");
+
+        let mut editor = Editor {
+            history: vec!["neww".into(), "splitw".into()],
+            index: 2,
+            ..Editor::default()
+        };
+        for _ in 0..3 {
+            editor.handle(key(KeyCode::Up));
+        }
+        assert_eq!(editor.input, "neww");
+        assert_eq!(editor.index, 0);
+        for _ in 0..3 {
+            editor.handle(key(KeyCode::Down));
+        }
+        assert_eq!(editor.input, "");
+        assert_eq!(editor.index, 2);
+    }
+
+    #[test]
     fn records_without_consecutive_duplicates_and_caps() {
         let mut editor = Editor {
             history: (0..HISTORY_LIMIT).map(|i| i.to_string()).collect(),
@@ -644,6 +669,23 @@ mod tests {
         editor.handle(key(KeyCode::BackTab));
         editor.handle(key(KeyCode::BackTab));
         assert_eq!(editor.input, "neww");
+    }
+
+    #[test]
+    fn tab_completes_mid_line_and_skips_mid_word() {
+        let mut editor = completing("new-w -d");
+        for _ in 0..3 {
+            editor.handle(key(KeyCode::Left));
+        }
+        editor.handle(key(KeyCode::Tab));
+        assert_eq!(editor.input, "new-window -d");
+        assert_eq!(editor.cursor, "new-window ".len());
+
+        let mut editor = completing("new-w");
+        editor.handle(key(KeyCode::Left));
+        editor.handle(key(KeyCode::Tab));
+        assert_eq!(editor.input, "new-w");
+        assert_eq!(editor.cursor, 4);
     }
 
     #[test]
