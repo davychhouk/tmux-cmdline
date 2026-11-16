@@ -15,7 +15,13 @@ struct Editor {
     cursor: usize,
     commands: String,
     aliases: String,
+    history: Vec<String>,
+    // history.len() means the unsent draft is shown.
+    index: usize,
+    draft: String,
 }
+
+const HISTORY_LIMIT: usize = 100;
 
 enum Action {
     Continue,
@@ -36,6 +42,8 @@ impl Editor {
                 KeyCode::Char('k') => self.input.truncate(self.cursor),
                 KeyCode::Char('w') => self.delete_word(),
                 KeyCode::Char('c') => return Action::Cancel,
+                KeyCode::Char('p') => self.recall(true),
+                KeyCode::Char('n') => self.recall(false),
                 _ => return Action::Continue,
             }
             return Action::Continue;
@@ -50,6 +58,8 @@ impl Editor {
             KeyCode::Right => self.cursor = self.next_boundary(),
             KeyCode::Home => self.cursor = 0,
             KeyCode::End => self.cursor = self.input.len(),
+            KeyCode::Up => self.recall(true),
+            KeyCode::Down => self.recall(false),
             KeyCode::Backspace if self.cursor > 0 => {
                 let previous = self.previous_boundary();
                 self.input.drain(previous..self.cursor);
@@ -64,6 +74,43 @@ impl Editor {
         }
 
         Action::Continue
+    }
+
+    // Only entries starting with the draft match, so an empty draft walks all history.
+    fn recall(&mut self, up: bool) {
+        let len = self.history.len();
+        if self.index == len {
+            self.draft = self.input.clone();
+        }
+        let matches = |entry: &String| entry.starts_with(&self.draft);
+        let found = if up {
+            self.history[..self.index].iter().rposition(matches)
+        } else {
+            self.history
+                .get(self.index + 1..)
+                .and_then(|rest| rest.iter().position(matches))
+                .map(|i| i + self.index + 1)
+        };
+        match found {
+            Some(index) => {
+                self.index = index;
+                self.input = self.history[index].clone();
+            }
+            None if !up && self.index < len => {
+                self.index = len;
+                self.input = std::mem::take(&mut self.draft);
+            }
+            None => return,
+        }
+        self.cursor = self.input.len();
+    }
+
+    fn record(&mut self) {
+        if self.history.last() != Some(&self.input) {
+            self.history.push(self.input.clone());
+        }
+        let excess = self.history.len().saturating_sub(HISTORY_LIMIT);
+        self.history.drain(..excess);
     }
 
     fn previous_boundary(&self) -> usize {
@@ -97,16 +144,31 @@ fn main() -> io::Result<()> {
         .nth(1)
         .map(PathBuf::from)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing output file"))?;
+    let history_file = env::var_os("TCU_HISTORY").map(PathBuf::from);
+    let history: Vec<String> = history_file
+        .as_ref()
+        .and_then(|path| fs::read_to_string(path).ok())
+        .map(|text| text.lines().map(String::from).collect())
+        .unwrap_or_default();
     let mut editor = Editor {
         commands: env::var("TCU_COMMANDS").unwrap_or_default(),
         aliases: env::var("TCU_ALIASES").unwrap_or_default(),
+        index: history.len(),
+        history,
         ..Editor::default()
     };
     let submitted = ratatui::run(|terminal| run(terminal, &mut editor))?;
 
     if submitted && !editor.input.trim().is_empty() {
-        editor.input.push('\n');
-        fs::write(output, editor.input)?;
+        fs::write(output, format!("{}\n", editor.input))?;
+        if let Some(path) = history_file {
+            editor.record();
+            // History is best-effort: a write failure must not drop the command.
+            let _ = path
+                .parent()
+                .map_or(Ok(()), fs::create_dir_all)
+                .and_then(|()| fs::write(path, editor.history.join("\n") + "\n"));
+        }
     }
 
     Ok(())
@@ -372,6 +434,63 @@ mod tests {
 
         assert_eq!(editor.input, "nw 🦀 ");
         assert_eq!(editor.cursor, editor.input.len());
+    }
+
+    #[test]
+    fn cycles_history_without_modifying_it() {
+        let mut editor = Editor {
+            history: vec!["neww".into(), "splitw".into()],
+            index: 2,
+            ..Editor::default()
+        };
+        editor.handle(key(KeyCode::Up));
+        assert_eq!(editor.input, "splitw");
+        assert_eq!(editor.cursor, 6);
+        editor.handle(key(KeyCode::Up));
+        editor.handle(key(KeyCode::Up));
+        assert_eq!(editor.input, "neww");
+        editor.handle(key(KeyCode::Backspace));
+        editor.handle(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
+        editor.handle(key(KeyCode::Down));
+        editor.handle(key(KeyCode::Down));
+        assert_eq!(editor.input, "");
+        assert_eq!(editor.history, ["neww", "splitw"]);
+    }
+
+    #[test]
+    fn filters_history_by_draft_prefix() {
+        let mut editor = Editor {
+            history: vec!["neww".into(), "splitw".into(), "new-session".into()],
+            index: 3,
+            ..Editor::default()
+        };
+        for c in "new".chars() {
+            editor.handle(key(KeyCode::Char(c)));
+        }
+        editor.handle(key(KeyCode::Up));
+        assert_eq!(editor.input, "new-session");
+        editor.handle(key(KeyCode::Up));
+        editor.handle(key(KeyCode::Up));
+        assert_eq!(editor.input, "neww");
+        editor.handle(key(KeyCode::Down));
+        assert_eq!(editor.input, "new-session");
+        editor.handle(key(KeyCode::Down));
+        assert_eq!(editor.input, "new");
+        assert_eq!(editor.cursor, 3);
+    }
+
+    #[test]
+    fn records_without_consecutive_duplicates_and_caps() {
+        let mut editor = Editor {
+            history: (0..HISTORY_LIMIT).map(|i| i.to_string()).collect(),
+            ..Editor::default()
+        };
+        editor.input = "neww".into();
+        editor.record();
+        editor.record();
+        assert_eq!(editor.history.len(), HISTORY_LIMIT);
+        assert_eq!(editor.history.first().unwrap(), "1");
+        assert_eq!(editor.history.last().unwrap(), "neww");
     }
 
     #[test]

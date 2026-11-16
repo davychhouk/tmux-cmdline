@@ -84,9 +84,10 @@ if [ ! -x "$binary" ]; then
 fi
 
 accent=$(opt accent '#{@thm_blue}' cyan)
-prompt=$(opt prompt '' ' ')
+prompt=$(opt prompt '' ' ')
 title=$(opt title '' ' Tmux Cmdline ')
 width=$(opt width '' '40%')
+history=$(opt history-file '' "${XDG_STATE_HOME:-$HOME/.local/state}/tmux-cmdline/history")
 commands=$(
   tmux list-commands -F '#{command_list_name} #{command_list_alias}'
 )
@@ -108,6 +109,7 @@ tmux display-popup -E -w "$width" -h 3 -x C -y "$y" \
   -e "TCU_ACCENT=$accent" -e "TCU_PROMPT=$prompt" \
   -e "TCU_COMMANDS=$commands" \
   -e "TCU_ALIASES=$aliases" \
+  -e "TCU_HISTORY=$history" \
   -b "$border" \
   -s "bg=$bg,fg=$fg" \
   -S "fg=$accent,bg=$bg" \
